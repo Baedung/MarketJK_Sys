@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import {
   Plus, Trash2, Upload, Download, Mail, Check, ChevronUp, ChevronDown,
   FileSpreadsheet, Building2, Package, Send, RefreshCw, Pencil, X,
-  Search, Stamp, ArrowRight, AlertCircle, CheckCircle2
+  Search, Stamp, ArrowRight, AlertCircle, CheckCircle2, KeyRound
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -260,6 +260,7 @@ export default function App() {
             showToast={showToast}
           />
         )}
+        {tab === 'settings' && <SettingsTab showToast={showToast} />}
       </div>
 
       {toast && (
@@ -282,6 +283,7 @@ function Header({ tab, setTab, supplierCount, mailCount }) {
     { id: 'suppliers', label: '매입처 관리', icon: Building2, badge: supplierCount },
     { id: 'generate', label: '발주서 생성', icon: FileSpreadsheet },
     { id: 'mail', label: '메일 발송', icon: Mail, badge: mailCount },
+    { id: 'settings', label: '설정', icon: KeyRound },
   ];
   return (
     <div className="border-b border-slate-300 bg-white">
@@ -1152,6 +1154,106 @@ function MailTab({ genList, sendLog, setSendLog, showToast }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Tab 5: 설정 (네이버 메일 계정 — Vercel KV에 저장)                     */
+/* ------------------------------------------------------------------ */
+
+function SettingsTab({ showToast }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json().catch(() => ({}));
+        setStatus(data);
+        if (data?.email) setEmail(data.email);
+      } catch (err) {
+        console.error(err);
+        setStatus({ kvMissing: true });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const save = async () => {
+    if (!email.trim()) return showToast('네이버 이메일을 입력해주세요.', 'err');
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), appPassword: password.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '저장 중 오류가 발생했습니다.');
+      setStatus(data);
+      setPassword('');
+      showToast('메일 발송 설정을 저장했습니다.');
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || '저장 중 오류가 발생했습니다.', 'err');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-lg">
+      <SectionHeading
+        title="메일 발송 설정"
+        desc="여기서 저장한 네이버 계정으로 '메일 발송' 탭의 '네이버로 실제 발송' 버튼이 메일을 보냅니다."
+      />
+
+      {!loading && status?.kvMissing && (
+        <div className="text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-md p-4 mb-4">
+          아직 저장소(Vercel KV)가 연결되지 않아 여기서 저장한 내용이 유지되지 않습니다. Vercel 프로젝트의{' '}
+          <b>Storage</b> 탭 → <b>Create Database</b> → <b>KV</b>를 만들어 이 프로젝트에 연결(Connect)하고 재배포하면,
+          이후부터는 이 화면에서 입력·수정한 내용이 바로 적용됩니다. (한 번만 하면 됩니다)
+        </div>
+      )}
+
+      <div className="bg-white border border-slate-200 rounded-md p-4 space-y-3">
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">네이버 이메일</label>
+          <input
+            value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="mycompany@naver.com"
+            className="w-full text-sm px-3 py-2 border border-slate-300 rounded-md outline-none focus:border-slate-500"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">
+            앱 비밀번호
+            {status?.hasPassword && <span className="text-emerald-600 ml-1.5">저장됨 — 비워두면 기존 값 유지</span>}
+          </label>
+          <input
+            type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            placeholder={status?.hasPassword ? '변경할 때만 입력하세요' : '네이버 IMAP/SMTP 앱 비밀번호'}
+            className="w-full text-sm px-3 py-2 border border-slate-300 rounded-md outline-none focus:border-slate-500"
+          />
+        </div>
+        <button
+          onClick={save} disabled={saving || loading}
+          className="px-3.5 py-2 bg-slate-800 text-white text-sm rounded-md hover:bg-slate-700 disabled:opacity-50"
+        >
+          {saving ? '저장 중…' : '저장'}
+        </button>
+      </div>
+
+      <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+        네이버 메일 → 환경설정 → POP3/IMAP 설정에서 IMAP/SMTP 사용을 켜주세요. 2단계 인증을 사용 중이라면 네이버 아이디 관리에서
+        발급받은 애플리케이션(앱) 비밀번호를 입력하고, 아니라면 로그인 비밀번호를 그대로 입력하면 됩니다.
+      </p>
     </div>
   );
 }
