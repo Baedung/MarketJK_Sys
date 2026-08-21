@@ -53,9 +53,12 @@ Upstash Redis를 연결하지 않아도, 기존 방식대로 Vercel 프로젝트
 
 ```
 ├─ api/send-mail.js     # 네이버 SMTP로 발주서를 첨부해 실제 발송하는 서버리스 함수
-├─ api/settings.js       # '설정' 탭의 네이버 계정 정보를 Vercel KV에 저장/조회
+├─ api/settings.js       # '설정' 탭의 네이버 계정 정보를 Upstash Redis에 저장/조회
+├─ api/generate-po.js    # 매입처 양식에 값을 채우고 헤더 행에 배경색을 입혀 발주서를 생성 (exceljs)
 ├─ src/App.jsx          # 전체 앱 (통합양식 / 매입처 관리 / 발주서 생성 / 메일 발송 / 설정)
 ├─ src/main.jsx
 ├─ src/index.css
 └─ index.html
 ```
+
+발주서 생성은 브라우저가 아니라 `api/generate-po.js`(서버)에서 처리합니다. 브라우저에서 쓰는 무료 엑셀 라이브러리(xlsx)는 셀 값은 잘 다루지만 새 서식(배경색 등)을 저장하는 기능은 지원하지 않아서, 서식 쓰기가 되는 `exceljs`를 서버 쪽에서 사용해 헤더 행에 배경색·볼드체를 입힙니다.

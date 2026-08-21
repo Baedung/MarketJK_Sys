@@ -98,36 +98,40 @@ function downloadBlob(blob, filename) {
 }
 
 // rows: [{ values: { [masterFieldId]: rawValue } }]  →  매입처 원본 양식에 값을 채운 파일 생성
+// 실제 채우기/헤더 색상 입히기는 서식 쓰기가 가능한 서버(/api/generate-po, exceljs)에서 처리합니다.
 async function buildSupplierFile(supplier, rows, masterFields, loadSupplierTemplate) {
-  const base64 = await loadSupplierTemplate(supplier.id);
-  if (!base64) throw new Error('NO_TEMPLATE');
+  const templateBase64 = await loadSupplierTemplate(supplier.id);
+  if (!templateBase64) throw new Error('NO_TEMPLATE');
 
-  const wb = XLSX.read(base64ToArrayBuffer(base64), { type: 'array', cellStyles: true });
-  const ws = wb.Sheets[supplier.sheetName];
-  let maxR = 0, maxC = 0;
-  const existingRange = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
-  if (existingRange) { maxR = existingRange.e.r; maxC = existingRange.e.c; }
-
-  rows.forEach((row, i) => {
-    const r = supplier.dataStartRowIdx + i;
+  // 각 행을 "절대 열 번호 → 값" 형태로 변환해서 서버로 보냅니다.
+  const rowsByCol = rows.map((row) => {
+    const obj = {};
     masterFields.forEach((f) => {
       const c = supplier.mapping?.[f.id];
       if (c === null || c === undefined) return;
       const raw = row.values[f.id];
       if (raw === undefined || String(raw).trim() === '') return;
-      const num = Number(raw);
-      const isNum = raw !== '' && !isNaN(num) && String(raw).trim() !== '' && /^-?\d+(\.\d+)?$/.test(String(raw).trim());
-      const addr = XLSX.utils.encode_cell({ r, c });
-      ws[addr] = isNum ? { t: 'n', v: num } : { t: 's', v: String(raw) };
-      if (r > maxR) maxR = r;
-      if (c > maxC) maxC = c;
+      obj[c] = String(raw);
     });
+    return obj;
   });
-  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxR, c: maxC } });
 
-  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
+  const res = await fetch('/api/generate-po', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      templateBase64,
+      sheetName: supplier.sheetName,
+      headerRowIdx: supplier.headerRowIdx,
+      dataStartRowIdx: supplier.dataStartRowIdx,
+      rows: rowsByCol,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || '발주서 생성 중 오류가 발생했습니다.');
+
   const fileName = `${today()}_${supplier.name}_발주서.xlsx`;
-  return { fileName, base64: arrayBufferToBase64(out), itemCount: rows.length };
+  return { fileName, base64: data.base64, itemCount: rows.length };
 }
 
 function findSupplierByName(suppliers, rawName) {
@@ -594,10 +598,14 @@ function SupplierDetail({ supplier, masterFields, updateSupplier, removeSupplier
       const wb = XLSX.read(buf, { type: 'array', cellStyles: true });
       const sheetName = wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
+      // sheet_to_json은 시트의 실제 사용 범위(!ref) 기준 상대 인덱스를 반환하므로,
+      // 셀 쓰기에 쓰이는 절대 행/열 번호(A1 기준)로 변환해줘야 합니다.
+      const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : { s: { r: 0, c: 0 } };
       const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      const headerRowIdx = detectHeaderRow(aoa);
-      const headerRow = aoa[headerRowIdx] || [];
-      const cols = headerRow.map((h, i) => ({ colIndex: i, header: String(h || '').trim() })).filter((c, i) => c.header !== '' || i < headerRow.length);
+      const headerRowIdxRel = detectHeaderRow(aoa);
+      const headerRowIdx = headerRowIdxRel + range.s.r; // 절대 행 번호
+      const headerRow = aoa[headerRowIdxRel] || [];
+      const cols = headerRow.map((h, i) => ({ colIndex: i + range.s.c, header: String(h || '').trim() }));
       const mapping = autoMatch(masterFields, cols);
       const base64 = arrayBufferToBase64(buf);
       await saveSupplierTemplate(supplier.id, base64);
@@ -788,7 +796,7 @@ function GenerateTab({ masterFields, suppliers, loadSupplierTemplate, genList, s
         id: uid(), supplierId: supplier.id, supplierName: supplier.name, email: supplier.email,
         fileName, base64, createdAt: Date.now(), itemCount,
       };
-      setGenList([item, ...genList]);
+      setGenList([item]);
       setRows([blankRow()]);
       showToast(`${fileName} 생성 완료`);
     } catch (err) {
@@ -852,7 +860,7 @@ function GenerateTab({ masterFields, suppliers, loadSupplierTemplate, genList, s
         }
       }
 
-      if (newItems.length) setGenList((prev) => [...newItems, ...prev]);
+      if (newItems.length) setGenList(newItems);
 
       if (newItems.length && unmatched.size === 0 && noTemplate.size === 0) {
         showToast(`${newItems.length}개 매입처 발주서를 자동 생성했습니다.`);
