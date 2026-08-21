@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,16 +15,16 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 1순위: '설정' 화면에서 Vercel KV에 저장한 계정 정보
+  // 1순위: '설정' 화면에서 Upstash Redis에 저장한 계정 정보
   // 2순위: Vercel 프로젝트 환경변수 (NAVER_EMAIL / NAVER_APP_PASSWORD)
   let user = process.env.NAVER_EMAIL;
   let pass = process.env.NAVER_APP_PASSWORD;
   try {
-    const cfg = await kv.get('mail-config');
+    const cfg = await redis.get('mail-config');
     if (cfg?.email) user = cfg.email;
     if (cfg?.appPassword) pass = cfg.appPassword;
   } catch (err) {
-    // KV 미연결 시 환경변수만 사용
+    // Redis 미연결 시 환경변수만 사용
   }
 
   if (!user || !pass) {

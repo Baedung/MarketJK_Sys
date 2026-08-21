@@ -1159,7 +1159,7 @@ function MailTab({ genList, sendLog, setSendLog, showToast }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Tab 5: 설정 (네이버 메일 계정 — Vercel KV에 저장)                     */
+/* Tab 5: 설정 (네이버 메일 계정 — Upstash Redis에 저장)                */
 /* ------------------------------------------------------------------ */
 
 function SettingsTab({ showToast }) {
@@ -1216,8 +1216,8 @@ function SettingsTab({ showToast }) {
 
       {!loading && status?.kvMissing && (
         <div className="text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-md p-4 mb-4">
-          아직 저장소(Vercel KV)가 연결되지 않아 여기서 저장한 내용이 유지되지 않습니다. Vercel 프로젝트의{' '}
-          <b>Storage</b> 탭 → <b>Create Database</b> → <b>KV</b>를 만들어 이 프로젝트에 연결(Connect)하고 재배포하면,
+          아직 저장소(Upstash Redis)가 연결되지 않아 여기서 저장한 내용이 유지되지 않습니다. Vercel 프로젝트의{' '}
+          <b>Storage</b> 탭 → Marketplace에서 <b>Upstash</b> (Redis) 를 만들어 이 프로젝트에 연결(Connect)하고 재배포하면,
           이후부터는 이 화면에서 입력·수정한 내용이 바로 적용됩니다. (한 번만 하면 됩니다)
         </div>
       )}

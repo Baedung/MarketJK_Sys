@@ -1,14 +1,16 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
+
+const redis = Redis.fromEnv();
 
 const CONFIG_KEY = 'mail-config';
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
-      const cfg = await kv.get(CONFIG_KEY);
+      const cfg = await redis.get(CONFIG_KEY);
       res.status(200).json({ email: cfg?.email || '', hasPassword: !!cfg?.appPassword });
     } catch (err) {
-      // Vercel KV가 아직 프로젝트에 연결되지 않은 경우
+      // Upstash Redis가 아직 프로젝트에 연결되지 않은 경우
       res.status(200).json({ email: '', hasPassword: false, kvMissing: true });
     }
     return;
@@ -21,17 +23,17 @@ export default async function handler(req, res) {
       return;
     }
     try {
-      const existing = (await kv.get(CONFIG_KEY)) || {};
+      const existing = (await redis.get(CONFIG_KEY)) || {};
       const next = {
         email: String(email).trim(),
         appPassword: appPassword ? String(appPassword).trim() : existing.appPassword || '',
       };
-      await kv.set(CONFIG_KEY, next);
+      await redis.set(CONFIG_KEY, next);
       res.status(200).json({ email: next.email, hasPassword: !!next.appPassword });
     } catch (err) {
       console.error('settings save error:', err);
       res.status(500).json({
-        error: 'Vercel KV가 연결되지 않았습니다. 프로젝트의 Storage 탭에서 KV를 만들어 연결한 뒤 다시 시도해주세요.',
+        error: 'Upstash Redis가 연결되지 않았습니다. 프로젝트의 Storage 탭에서 Upstash Redis를 만들어 연결한 뒤 다시 시도해주세요.',
       });
     }
     return;
